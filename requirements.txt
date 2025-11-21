@@ -1,0 +1,22 @@
+streamlit
+
+# Llama.cpp GGUF loader for Python
+ctransformers>=0.2.27
+
+# HuggingFace Hub for model downloads
+huggingface-hub
+
+# Embeddings
+sentence-transformers
+
+# LangChain (for RAG)
+langchain
+langchain-community
+langchain-text-splitters
+langchain-openai
+
+# Vector DB
+chromadb
+
+# PDF loading
+pypdf
