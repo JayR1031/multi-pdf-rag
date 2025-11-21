@@ -93,8 +93,12 @@ if user_input:
     st.markdown(
         f"<div class='chat-message user-message'>{escaped_user_input}</div>", unsafe_allow_html=True)
 
-    # RAG prompt
-    prompt, docs = answer_question(vectordb, llm, user_input)
+    # RAG prompt with conversation history
+    # Get previous messages (excluding the current one we just added)
+    conversation_history = st.session_state.messages[:-1] if len(
+        st.session_state.messages) > 1 else []
+    prompt, docs = answer_question(
+        vectordb, llm, user_input, conversation_history=conversation_history)
 
     # Stream result
     streamed = ""

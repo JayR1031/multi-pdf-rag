@@ -129,12 +129,39 @@ def stream_llm_answer(model, prompt, max_new_tokens=256):
 # ----------------------------------------
 # 5. RAG Prompt Construction
 # ----------------------------------------
-def answer_question(vectordb, llm, question, k=3):
+def answer_question(vectordb, llm, question, conversation_history=None, k=3):
+    """
+    Generate answer to question using RAG with optional conversation history.
+
+    Args:
+        vectordb: ChromaDB vector store
+        llm: Language model (not used directly, kept for API consistency)
+        question: Current question
+        conversation_history: List of tuples [(role, content), ...] for previous Q&A
+        k: Number of documents to retrieve
+
+    Returns:
+        prompt: Formatted prompt string
+        docs: Retrieved documents
+    """
     retriever = vectordb.as_retriever(search_kwargs={"k": k})
     # LangChain 1.0+ uses invoke() instead of get_relevant_documents()
     docs = retriever.invoke(question)
 
     context = "\n\n".join(d.page_content for d in docs)
+
+    # Build conversation history if provided
+    conversation_context = ""
+    if conversation_history:
+        # Include last 3-4 exchanges to stay within context window
+        recent_history = conversation_history[-4:] if len(
+            conversation_history) > 4 else conversation_history
+        conversation_context = "\n\nPrevious conversation:\n"
+        for role, content in recent_history:
+            if role == "user":
+                conversation_context += f"User: {content}\n"
+            elif role == "assistant":
+                conversation_context += f"Assistant: {content}\n"
 
     # Llama 2 chat format with safety guidelines and strict context adherence
     prompt = f"""<s>[INST] <<SYS>>
@@ -142,23 +169,25 @@ You are a document Q&A assistant. You ONLY answer questions using information fr
 
 STRICT RULES:
 1. ONLY use information from the "Context from uploaded documents" section below.
-2. If the question cannot be answered from the context, you MUST respond EXACTLY with: "Thank you for your questions but this question is outside of context and suggest you ask about the files you uploaded."
-3. Do NOT use any knowledge from your training data. Do NOT make assumptions. Do NOT provide general information.
-4. If the context is empty or the question is not about the documents, use the exact response from rule 2.
-5. You must NEVER generate, discuss, or reference content related to:
+2. You can reference previous questions and answers in the conversation history to understand follow-up questions.
+3. For follow-up questions (e.g., "What about X?", "Tell me more about that", "How does that work?"), use the conversation history to understand what the user is referring to.
+4. If the question cannot be answered from the context, you MUST respond EXACTLY with: "Thank you for your questions but this question is outside of context and suggest you ask about the files you uploaded."
+5. Do NOT use any knowledge from your training data. Do NOT make assumptions. Do NOT provide general information.
+6. If the context is empty or the question is not about the documents, use the exact response from rule 4.
+7. You must NEVER generate, discuss, or reference content related to:
    - Violence, harm, or threats
    - Sexual content or explicit material
    - Murder, death, or graphic descriptions
    - Racism, prejudice, discrimination, or hate speech
    - Any offensive, inappropriate, or harmful topics
-6. If asked about inappropriate topics, respond: "I can only answer questions about the content in the uploaded documents, and I cannot discuss that topic."
-7. Keep responses professional, respectful, and focused solely on the document content.
+8. If asked about inappropriate topics, respond: "I can only answer questions about the content in the uploaded documents, and I cannot discuss that topic."
+9. Keep responses professional, respectful, and focused solely on the document content.
 
 Remember: You have NO personal information, NO general knowledge, and NO ability to answer questions outside the provided context.
 <</SYS>>
 
 Context from uploaded documents:
-{context}
+{context}{conversation_context}
 
 Question: {question} [/INST]"""
 
